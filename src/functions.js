@@ -41,5 +41,6 @@ export const FUNCTION_LIST = [
   `resetConfiguration(): void`,
   // --- New Functions ---
   `setPropellerSize(scale: number): void // Sets the scale of the propellers, e.g., 1 is normal, 2 is double size.`,
-  `setWingSpan(scale: number): void // Sets the wingspan of the fixed-wing drone.`
+  `setWingSpan(scale: number): void // Sets the wingspan of the fixed-wing drone., e.g. 2.5 is default.`,
+  `giveInfo(answer: string): void // Instead of changing something, just answer the user's question. It could be general information or recommendation`
 ];

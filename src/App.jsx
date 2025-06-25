@@ -5,6 +5,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Box as DreiBox, Cylinder, Sphere } from '@react-three/drei';
 import './App.css';
 import { runAgent } from './useDroneAgent';
+import { parseFString } from '@langchain/core/prompts';
 
 // --- Reusable Materials ---
 const materials = {
@@ -151,6 +152,9 @@ export default function App() {
       const scale = parseFloat(args.scale) || 2.5;
       setWingSpan(scale);
       addMessage('system', `Wingspan set to ${scale} meters.`);
+    },
+    giveInfo: (args) => {
+      addMessage('system', args.answer);
     }
   };
 
