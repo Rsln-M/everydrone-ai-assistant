@@ -1,13 +1,44 @@
-// Step 1: Add imports for types we will use.
-// FC (Functional Component) is a helper type for React components.
-// We also import THREE to reference types from the three.js library.
+// src/App.tsx
+
 import React, { useState, useRef, useEffect, FC, ComponentProps } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Box as DreiBox, Cylinder, Sphere } from '@react-three/drei';
-import * as THREE from 'three'; // Import THREE for its types
+import * as THREE from 'three';
 import './App.css';
-import { runAgent } from './useDroneAgent';
-// Note: parseFString is not used, so it can be removed.
+// Make sure you have converted useDroneAgent and tools to TypeScript
+import { runAgent, AgentResponse } from './useDroneAgent';
+
+// --- Type Definitions ---
+type PropellerProps = {
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: number;
+};
+
+type RotaryWingDroneProps = ComponentProps<'group'> & {
+  propellerScale?: number;
+};
+
+type FixedWingDroneProps = ComponentProps<'group'> & {
+  wingSpan?: number;
+  propellerScale?: number;
+};
+
+type ChatMessage = {
+  role: 'user' | 'system';
+  content: string;
+};
+
+type ChatState = {
+  isChatOpen: boolean;
+  setIsChatOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  chatHistory: ChatMessage[];
+  userInput: string;
+  setUserInput: React.Dispatch<React.SetStateAction<string>>;
+  isProcessing: boolean;
+  handleCommand: () => Promise<void>;
+};
+
 
 // --- Reusable Materials ---
 const materials = {
@@ -16,10 +47,7 @@ const materials = {
   propeller: <meshStandardMaterial color="#1e272e" roughness={0.1} metalness={0.2} />,
 };
 
-// --- Helper Icon Components (Typed) ---
-// Step 2: Type the props for our simple SVG components.
-// FC<ComponentProps<'svg'>> means this is a Functional Component
-// that accepts any standard SVG properties (like className, etc.).
+// --- Icon Components ---
 const ChatIcon: FC<ComponentProps<'svg'>> = (props) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -32,39 +60,16 @@ const CloseIcon: FC<ComponentProps<'svg'>> = (props) => (
   </svg>
 );
 
-// --- 3D Components (Typed) ---
-
-// Step 3: Define the specific props for the Propeller component.
-type PropellerProps = {
-  position: [number, number, number];
-  rotation?: [number, number, number]; // '?' makes the prop optional
-  scale?: number;
-};
-
-// And apply the type to the component.
+// --- 3D Components ---
 const Propeller: FC<PropellerProps> = ({ position, rotation = [0, 0, 0], scale = 1 }) => {
-  // Step 4: Add a type to the useRef hook.
-  // It will hold a reference to a THREE.Group object.
   const ref = useRef<THREE.Group>(null);
-  useFrame((_, delta) => {
-    // The '!' tells TypeScript "I am sure ref.current is not null here".
-    // A safer way is 'if (ref.current) ...'
-    if (ref.current) {
-      ref.current.rotation.y += delta * 15;
-    }
-  });
+  useFrame((_, delta) => { if (ref.current) ref.current.rotation.y += delta * 15; });
   return (
     <group position={position} ref={ref} scale={scale} rotation={rotation}>
       <DreiBox args={[0.5, 0.02, 0.1]}>{materials.propeller}</DreiBox>
       <DreiBox args={[0.1, 0.02, 0.5]}>{materials.propeller}</DreiBox>
     </group>
   );
-};
-
-// Step 5: Define and apply types for the drone components.
-// ComponentProps<'group'> allows us to pass standard group props like 'rotation'.
-type RotaryWingDroneProps = ComponentProps<'group'> & {
-  propellerScale?: number;
 };
 
 const RotaryWingDrone: FC<RotaryWingDroneProps> = ({ propellerScale = 1, ...props }) => {
@@ -81,11 +86,6 @@ const RotaryWingDrone: FC<RotaryWingDroneProps> = ({ propellerScale = 1, ...prop
   );
 };
 
-type FixedWingDroneProps = ComponentProps<'group'> & {
-  wingSpan?: number;
-  propellerScale?: number;
-};
-
 const FixedWingDrone: FC<FixedWingDroneProps> = ({ wingSpan = 2.5, propellerScale = 1, ...props }) => {
   return (
     <group {...props}>
@@ -98,31 +98,10 @@ const FixedWingDrone: FC<FixedWingDroneProps> = ({ wingSpan = 2.5, propellerScal
   );
 };
 
-// --- Chat UI Component (Typed) ---
-
-// Step 6: Define types for our chat logic. This is where TS is most helpful.
-type ChatMessage = {
-  role: 'user' | 'system'; // The role can ONLY be 'user' or 'system'
-  content: string;
-};
-
-type ChatState = {
-  isChatOpen: boolean;
-  setIsChatOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  chatHistory: ChatMessage[];
-  userInput: string;
-  setUserInput: React.Dispatch<React.SetStateAction<string>>;
-  isProcessing: boolean;
-  handleCommand: () => Promise<void>;
-};
-
-// Apply the ChatState type to the component's props.
+// --- Chat UI Component ---
 const ChatWidget: FC<{ chatState: ChatState }> = ({ chatState }) => {
-  const {
-    isChatOpen, setIsChatOpen, chatHistory,
-    userInput, setUserInput, isProcessing, handleCommand
-  } = chatState;
-  const chatEndRef = useRef<HTMLDivElement>(null); // This ref will be on a <div>
+  const { isChatOpen, setIsChatOpen, chatHistory, userInput, setUserInput, isProcessing, handleCommand } = chatState;
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -146,33 +125,29 @@ const ChatWidget: FC<{ chatState: ChatState }> = ({ chatState }) => {
       </div>
       <div className="chat-log">
         {chatHistory.map((msg, index) => (
-          <div key={index} className={`chat-message ${msg.role}`}>
-            <p>{msg.content}</p>
-          </div>
+          <div key={index} className={`chat-message ${msg.role}`}><p>{msg.content}</p></div>
         ))}
         {isProcessing && <div className="chat-message system"><p><i>Thinking...</i></p></div>}
         <div ref={chatEndRef} />
       </div>
       <div className="chat-input-area">
-        <input
-          type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)}
+        <input type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)}
           placeholder="Describe your drone..." onKeyDown={(e) => e.key === 'Enter' && handleCommand()}
-          disabled={isProcessing}
-        />
+          disabled={isProcessing} />
         <button onClick={handleCommand} disabled={isProcessing}>Send</button>
       </div>
     </div>
   );
-}
+};
 
-
-// --- Main App Component (Typed) ---
+// --- Main App Component ---
 const App: FC = () => {
-  // Step 7: Add explicit types to all our state variables.
+  // 3D Scene State
   const [droneType, setDroneType] = useState<'Fixed-wing' | 'Rotary-wing'>('Fixed-wing');
   const [propellerScale, setPropellerScale] = useState<number>(1);
   const [wingSpan, setWingSpan] = useState<number>(2.5);
 
+  // Chat State
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [userInput, setUserInput] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -184,47 +159,43 @@ const App: FC = () => {
     setChatHistory(prev => [...prev, { role, content }]);
   };
 
-  // Step 8: Define the type for the functionMap's arguments.
-  // This ensures that when we call a function, we know what 'args' will contain.
-  const functionMap: Record<string, (args: any) => void> = {
-    setDroneType: (args: { type: 'Fixed-wing' | 'Rotary-wing' }) => {
-      if (["Fixed-wing", "Rotary-wing"].includes(args.type)) {
-        setDroneType(args.type);
-        addMessage('system', `Drone type set to ${args.type}.`);
-      } else {
-        addMessage('system', `Sorry, I don't recognize the type "${args.type}".`);
-      }
-    },
-    setPropellerSize: (args: { scale: string | number }) => {
-      const scale = parseFloat(String(args.scale)) || 1;
-      setPropellerScale(scale);
-      addMessage('system', `Propeller size set to ${scale}x.`);
-    },
-    setWingSpan: (args: { scale: string | number }) => {
-      const scale = parseFloat(String(args.scale)) || 2.5;
-      setWingSpan(scale);
-      addMessage('system', `Wingspan set to ${scale} meters.`);
-    },
-    giveInfo: (args: { answer: string }) => {
-      addMessage('system', args.answer);
-    }
-  };
-
+  // --- UPDATED: Main command handler ---
   const handleCommand = async () => {
     if (!userInput.trim() || isProcessing) return;
     addMessage('user', userInput);
     setIsProcessing(true);
+
     try {
-      const result = await runAgent(userInput);
-      if (result && functionMap[result.function]) {
-        functionMap[result.function](result.args);
-      } else {
-        addMessage('system', "Sorry, I couldn't understand that command.");
+      const result: AgentResponse | null = await runAgent(userInput);
+      
+      if (!result) {
+        addMessage('system', "Sorry, I couldn't process that command.");
+        setIsProcessing(false);
+        setUserInput('');
+        return;
       }
+      
+      // Check which function was called by checking for unique property names
+      if ('type' in result) {
+        setDroneType(result.type);
+        addMessage('system', `Drone type set to ${result.type}.`);
+      } else if ('propellerScale' in result) {
+        setPropellerScale(result.propellerScale);
+        addMessage('system', `Propeller size set to ${result.propellerScale}x.`);
+      } else if ('wingSpan' in result) {
+        setWingSpan(result.wingSpan);
+        addMessage('system', `Wingspan set to ${result.wingSpan} meters.`);
+      } else if ('answer' in result) {
+        addMessage('system', result.answer);
+      } else {
+        addMessage('system', "Sorry, I understood the command but couldn't execute it.");
+      }
+
     } catch (error) {
       addMessage('system', "There was an error processing your request.");
       console.error("Agent error:", error);
     }
+
     setIsProcessing(false);
     setUserInput('');
   };
@@ -248,6 +219,6 @@ const App: FC = () => {
       <ChatWidget chatState={chatState} />
     </div>
   );
-}
+};
 
 export default App;
