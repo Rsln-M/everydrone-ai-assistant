@@ -1,4 +1,4 @@
-export const FUNCTION_LIST = [
+export const FUNCTION_LIST: string[] = [
   `setDroneType(type: "Fixed-wing" | "Rotary-wing"): void`,
   `setMissionPurpose(purpose: "Surveillance" | "Photography" | "Delivery" | "Mapping" | "Other"): void`,
   `setMissionRequirements(payloadKg: number, flightTimeMin: number, maxRangeKm: number): void`,
