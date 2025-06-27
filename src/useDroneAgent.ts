@@ -9,40 +9,28 @@ const chat = new ChatOpenAI({
   modelName: "gpt-4.1-mini",
 });
 
+// --- AUTOMATED TOOLS SETUP ---
+const formattedTools = Object.entries(tools).map(([name, schema]) => {
+    return {
+        name: name,
+        description: schema.description,
+        schema: schema,
+    };
+});
+
 // Bind the tools to the model by providing the name, description, and schema.
 // LangChain automatically converts this to the format OpenAI expects.
 const modelWithTools = chat.withConfig({
-    tools: [
-        {
-            name: "setDroneType",
-            description: tools.setDroneType.description,
-            schema: tools.setDroneType,
-        },
-        {
-            name: "setPropellerSize",
-            description: tools.setPropellerSize.description,
-            schema: tools.setPropellerSize,
-        },
-        {
-            name: "setWingSpan",
-            description: tools.setWingSpan.description,
-            schema: tools.setWingSpan,
-        },
-        {
-            name: "giveInfo",
-            description: tools.giveInfo.description,
-            schema: tools.giveInfo,
-        },
-    ],
+    tools: formattedTools,
     tool_choice: "auto", // Explicitly set tool choice
 });
 
-// Define the AgentResponse type that App.tsx expects
-export type AgentResponse = 
-  | z.infer<typeof tools.setDroneType>
-  | z.infer<typeof tools.setPropellerSize>
-  | z.infer<typeof tools.setWingSpan>
-  | z.infer<typeof tools.giveInfo>;
+// --- AUTOMATED RESPONSE TYPE ---
+// This creates a union type of all possible tool schemas.
+// It grabs all the values from the 'tools' object and infers their types.
+type ToolSchemas = typeof tools[keyof typeof tools];
+export type AgentResponse = z.infer<ToolSchemas>;
+
 
 /**
  * Runs the AI agent with the user's input.
@@ -63,20 +51,15 @@ export async function runAgent(userInput: string): Promise<AgentResponse | null>
             
             console.log("Tool called:", functionName, "with args:", args);
             
-            // Validate and return the arguments based on the function called
-            switch (functionName) {
-                case "setDroneType":
-                    return tools.setDroneType.parse(args);
-                case "setPropellerSize":
-                    return tools.setPropellerSize.parse(args);
-                case "setWingSpan":
-                    return tools.setWingSpan.parse(args);
-                case "giveInfo":
-                    return tools.giveInfo.parse(args);
-                default:
-                    console.error("Unknown function called:", functionName);
-                    return null;
+            if (functionName in tools) {
+                // Inside this block, TypeScript is now certain that functionName is a valid key.
+                const key = functionName as keyof typeof tools;
+                const schema = tools[key];
+                return schema.parse(args);
             }
+
+            console.error("Unknown function called:", functionName);
+            return null;
         } else {
             // If no tool was called, return a generic info response
             return {
