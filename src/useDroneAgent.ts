@@ -1,6 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
-import * as tools from "./tools"; // Import all our Zod schemas as a single module object
+import * as tools from "./tools";
 
 // Initialize the Chat Model
 const chat = new ChatOpenAI({
@@ -8,36 +8,81 @@ const chat = new ChatOpenAI({
   temperature: 0,
   modelName: "gpt-4-turbo",
 });
-// Step 1: Combine all individual tool schemas into a single union schema.
-// This tells the model to pick ONE of the available tools.
-const toolSchemas = z.union([
-    tools.setDroneType,
-    tools.setPropellerSize,
-    tools.setWingSpan,
-    tools.giveInfo
-]);
 
-// Step 3: Create a new "chain" by binding the structured output schema to the model.
-// This forces the model's output to match the shape of one of our tools.
-const modelWithTools = chat.withStructuredOutput(toolSchemas);
+// Bind the tools to the model by providing the name, description, and schema.
+// LangChain automatically converts this to the format OpenAI expects.
+const modelWithTools = chat.withConfig({
+    tools: [
+        {
+            name: "setDroneType",
+            description: tools.setDroneType.description,
+            schema: tools.setDroneType,
+        },
+        {
+            name: "setPropellerSize",
+            description: tools.setPropellerSize.description,
+            schema: tools.setPropellerSize,
+        },
+        {
+            name: "setWingSpan",
+            description: tools.setWingSpan.description,
+            schema: tools.setWingSpan,
+        },
+        {
+            name: "giveInfo",
+            description: tools.giveInfo.description,
+            schema: tools.giveInfo,
+        },
+    ],
+    tool_choice: "auto", // Explicitly set tool choice
+});
 
-
-// Step 4: Define the new AgentResponse type directly from our Zod schema.
-// z.infer automatically creates a TypeScript type from a Zod schema.
-// This is much safer than our old manual interface.
-export type AgentResponse = z.infer<typeof toolSchemas>;
+// Define the AgentResponse type that App.tsx expects
+export type AgentResponse = 
+  | z.infer<typeof tools.setDroneType>
+  | z.infer<typeof tools.setPropellerSize>
+  | z.infer<typeof tools.setWingSpan>
+  | z.infer<typeof tools.giveInfo>;
 
 /**
  * Runs the AI agent with the user's input.
  * @param userInput The string input from the user.
- * @returns An object that is guaranteed to match one of our tool schemas, or null.
+ * @returns An object that matches one of our tool schemas, or null.
  */
-export async function runAgent(userInput: string) {
+export async function runAgent(userInput: string): Promise<AgentResponse | null> {
     try {
         console.log("Invoking AI model with tools...");
         const response = await modelWithTools.invoke(userInput);
         console.log("AI model returned:", response);
-        return response;
+        
+        // Check if the AI decided to call a tool
+        if (response.tool_calls && response.tool_calls.length > 0) {
+            const toolCall = response.tool_calls[0];
+            const functionName = toolCall.name;
+            const args = toolCall.args;
+            
+            console.log("Tool called:", functionName, "with args:", args);
+            
+            // Validate and return the arguments based on the function called
+            switch (functionName) {
+                case "setDroneType":
+                    return tools.setDroneType.parse(args);
+                case "setPropellerSize":
+                    return tools.setPropellerSize.parse(args);
+                case "setWingSpan":
+                    return tools.setWingSpan.parse(args);
+                case "giveInfo":
+                    return tools.giveInfo.parse(args);
+                default:
+                    console.error("Unknown function called:", functionName);
+                    return null;
+            }
+        } else {
+            // If no tool was called, return a generic info response
+            return {
+                answer: response.content as string || "I'm not sure how to help with that."
+            };
+        }
     } catch (error) {
         console.error("AI agent invocation failed:", error);
         return null;

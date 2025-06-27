@@ -1,5 +1,3 @@
-// src/tools.ts
-
 import { z } from "zod";
 
 // Define a schema for the setDroneType function
