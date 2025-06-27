@@ -6,7 +6,7 @@ import * as tools from "./tools";
 const chat = new ChatOpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
   temperature: 0,
-  modelName: "gpt-4-turbo",
+  modelName: "gpt-4.1-mini",
 });
 
 // Bind the tools to the model by providing the name, description, and schema.
