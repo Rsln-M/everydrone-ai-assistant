@@ -1,6 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
 import * as tools from "./tools";
+import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 
 // Initialize the Chat Model
 const chat = new ChatOpenAI({
@@ -52,9 +53,19 @@ export type ParsedAgentResponse = ToolResponseMap[keyof ToolResponseMap];
  * @returns An object that matches one of our tool schemas, or null.
  */
 export async function runAgent(userInput: string): Promise<ParsedAgentResponse | null> {
+    const systemPrompt = `You are an expert 3D drone configurator assistant. Your primary goal is to help users modify a drone model by calling the available functions.
+    
+    RULES:
+    1.  You MUST ONLY use a function if the user's request is a clear, direct, and unambiguous match for the function's description.
+    2.  Do NOT force a function call if the user's intent is unclear or conversational.
+    3.  When in doubt, or if no other tool is a direct match, your default behavior MUST be to use the 'giveInfo' function to provide a helpful answer or ask for clarification.
+    4.  Be concise in your responses.`;
     try {
         console.log("Invoking AI model with tools...");
-        const response = await modelWithTools.invoke(userInput);
+        const response = await modelWithTools.invoke([
+            new SystemMessage(systemPrompt),
+            new HumanMessage(userInput),
+        ]);
         console.log("AI model returned:", response);
         
         // Check if the AI decided to call a tool
