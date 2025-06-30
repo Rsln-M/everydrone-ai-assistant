@@ -31,13 +31,27 @@ const modelWithTools = chat.withConfig({
 type ToolSchemas = typeof tools[keyof typeof tools];
 export type AgentResponse = z.infer<ToolSchemas>;
 
+// --- NEW: Create a Discriminated Union Type ---
+// This mapped type iterates over each tool in tools.ts and creates
+// a specific object type for it, e.g.,
+// { name: 'setDroneType', args: { type: "Fixed-wing" | "Rotary-wing" } }
+type ToolResponseMap = {
+  [K in keyof typeof tools]: {
+    name: K;
+    args: z.infer<typeof tools[K]>;
+  }
+};
+
+// The final response type is a union of all possible tool response objects.
+// e.g. ToolResponseMap['setDroneType'] | ToolResponseMap['setPropellerSize'] | ...
+export type ParsedAgentResponse = ToolResponseMap[keyof ToolResponseMap];
 
 /**
  * Runs the AI agent with the user's input.
  * @param userInput The string input from the user.
  * @returns An object that matches one of our tool schemas, or null.
  */
-export async function runAgent(userInput: string): Promise<AgentResponse | null> {
+export async function runAgent(userInput: string): Promise<ParsedAgentResponse | null> {
     try {
         console.log("Invoking AI model with tools...");
         const response = await modelWithTools.invoke(userInput);
@@ -52,18 +66,20 @@ export async function runAgent(userInput: string): Promise<AgentResponse | null>
             console.log("Tool called:", functionName, "with args:", args);
             
             if (functionName in tools) {
-                // Inside this block, TypeScript is now certain that functionName is a valid key.
                 const key = functionName as keyof typeof tools;
                 const schema = tools[key];
-                return schema.parse(args);
+                // --- MODIFIED: Return an object with both name and parsed args ---
+                return { name: key, args: schema.parse(args) } as ParsedAgentResponse;
             }
 
             console.error("Unknown function called:", functionName);
             return null;
         } else {
-            // If no tool was called, return a generic info response
+            // If no tool was called, return the response using the 'giveInfo' structure
+            const content = response.content as string || "I'm not sure how to help with that.";
             return {
-                answer: response.content as string || "I'm not sure how to help with that."
+                name: 'giveInfo',
+                args: { answer: content }
             };
         }
     } catch (error) {

@@ -6,7 +6,7 @@ import { OrbitControls, Box as DreiBox, Cylinder, Sphere } from '@react-three/dr
 import * as THREE from 'three';
 import './App.css';
 // Make sure you have converted useDroneAgent and tools to TypeScript
-import { runAgent, AgentResponse } from './useDroneAgent';
+import { runAgent, ParsedAgentResponse } from './useDroneAgent';
 
 // --- Type Definitions ---
 type PropellerProps = {
@@ -164,31 +164,41 @@ const App: FC = () => {
     if (!userInput.trim() || isProcessing) return;
     addMessage('user', userInput);
     setIsProcessing(true);
+    setUserInput(''); // Clear input immediately
 
     try {
-      const result: AgentResponse | null = await runAgent(userInput);
+      const result: ParsedAgentResponse | null = await runAgent(userInput);
       
       if (!result) {
         addMessage('system', "Sorry, I couldn't process that command.");
         setIsProcessing(false);
-        setUserInput('');
         return;
       }
       
-      // Check which function was called by checking for unique property names
-      if ('type' in result) {
-        setDroneType(result.type);
-        addMessage('system', `Drone type set to ${result.type}.`);
-      } else if ('propellerScale' in result) {
-        setPropellerScale(result.propellerScale);
-        addMessage('system', `Propeller size set to ${result.propellerScale}x.`);
-      } else if ('wingSpan' in result) {
-        setWingSpan(result.wingSpan);
-        addMessage('system', `Wingspan set to ${result.wingSpan} meters.`);
-      } else if ('answer' in result) {
-        addMessage('system', result.answer);
-      } else {
-        addMessage('system', "Sorry, I understood the command but couldn't execute it.");
+      const { name, args } = result;
+      switch (name) {
+        case 'setDroneType':
+          setDroneType(args.type);
+          addMessage('system', `Drone type set to ${args.type}.`);
+          break;
+
+        case 'setPropellerSize':
+          setPropellerScale(args.propellerScale);
+          addMessage('system', `Propeller size set to ${args.propellerScale}x.`);
+          break;
+
+        case 'setWingSpan':
+          setWingSpan(args.wingSpan);
+          addMessage('system', `Wingspan set to ${args.wingSpan} meters.`);
+          break;
+        
+        case 'giveInfo':
+          addMessage('system', args.answer);
+          break;
+
+        default:
+          addMessage('system', "Sorry, I understood the command but couldn't execute it.");
+          break;
       }
 
     } catch (error) {
@@ -197,7 +207,6 @@ const App: FC = () => {
     }
 
     setIsProcessing(false);
-    setUserInput('');
   };
 
   const chatState: ChatState = {
