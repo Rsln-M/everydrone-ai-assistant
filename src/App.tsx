@@ -5,10 +5,19 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Box as DreiBox, Cylinder, Sphere } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-// Make sure you have converted useDroneAgent and tools to TypeScript
-import { runAgent, ParsedAgentResponse } from './useDroneAgent';
 
-// --- Type Definitions ---
+// --- REMOVED: No longer importing the agent directly ---
+// import { ParsedAgentResponse } from './useDroneAgent';
+
+// --- NEW: Define the response type directly in the frontend ---
+// This should match the type returned by your backend API
+type ParsedAgentResponse = {
+  name: 'setDroneType' | 'setPropellerSize' | 'setWingSpan' | 'giveInfo';
+  args: any; // Using `any` for simplicity, can be more specific
+};
+
+
+// --- Type Definitions (No Changes) ---
 type PropellerProps = {
   position: [number, number, number];
   rotation?: [number, number, number];
@@ -40,14 +49,13 @@ type ChatState = {
 };
 
 
-// --- Reusable Materials ---
+// --- Reusable Materials & Icons (No Changes) ---
 const materials = {
   body: <meshStandardMaterial color="#2c3e50" roughness={0.5} metalness={0.9} />,
   wing: <meshStandardMaterial color="#f39c12" roughness={0.4} metalness={0.6} />,
   propeller: <meshStandardMaterial color="#1e272e" roughness={0.1} metalness={0.2} />,
 };
 
-// --- Icon Components ---
 const ChatIcon: FC<ComponentProps<'svg'>> = (props) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -60,7 +68,8 @@ const CloseIcon: FC<ComponentProps<'svg'>> = (props) => (
   </svg>
 );
 
-// --- 3D Components ---
+
+// --- 3D Components (No Changes) ---
 const Propeller: FC<PropellerProps> = ({ position, rotation = [0, 0, 0], scale = 1 }) => {
   const ref = useRef<THREE.Group>(null);
   useFrame((_, delta) => { if (ref.current) ref.current.rotation.y += delta * 15; });
@@ -98,7 +107,8 @@ const FixedWingDrone: FC<FixedWingDroneProps> = ({ wingSpan = 2.5, propellerScal
   );
 };
 
-// --- Chat UI Component ---
+
+// --- Chat UI Component (No Changes) ---
 const ChatWidget: FC<{ chatState: ChatState }> = ({ chatState }) => {
   const { isChatOpen, setIsChatOpen, chatHistory, userInput, setUserInput, isProcessing, handleCommand } = chatState;
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -142,12 +152,12 @@ const ChatWidget: FC<{ chatState: ChatState }> = ({ chatState }) => {
 
 // --- Main App Component ---
 const App: FC = () => {
-  // 3D Scene State
+  // 3D Scene State (No Changes)
   const [droneType, setDroneType] = useState<'Fixed-wing' | 'Rotary-wing'>('Fixed-wing');
   const [propellerScale, setPropellerScale] = useState<number>(1);
   const [wingSpan, setWingSpan] = useState<number>(2.5);
 
-  // Chat State
+  // Chat State (No Changes)
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [userInput, setUserInput] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -159,15 +169,32 @@ const App: FC = () => {
     setChatHistory(prev => [...prev, { role, content }]);
   };
 
-  // --- UPDATED: Main command handler ---
+  // --- ⭐️ UPDATED: Main command handler to call the backend ⭐️ ---
   const handleCommand = async () => {
     if (!userInput.trim() || isProcessing) return;
-    addMessage('user', userInput);
+    
+    const userMessage = userInput; // Capture user input
+    addMessage('user', userMessage);
     setIsProcessing(true);
     setUserInput(''); // Clear input immediately
 
     try {
-      const result: ParsedAgentResponse | null = await runAgent(userInput);
+      // Step 1: Call your backend API endpoint instead of the local agent
+      const response = await fetch('http://localhost:3001/api/chat', { // Replace with your actual API endpoint
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userMessage,
+          conversationId: 42, // Send the conversation history
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      // Step 2: Get the JSON response from the backend
+      const result: ParsedAgentResponse = await response.json();
       
       if (!result) {
         addMessage('system', "Sorry, I couldn't process that command.");
@@ -175,6 +202,7 @@ const App: FC = () => {
         return;
       }
       
+      // Step 3: The existing switch statement works perfectly with the backend response
       const { name, args } = result;
       switch (name) {
         case 'setDroneType':
@@ -203,7 +231,7 @@ const App: FC = () => {
 
     } catch (error) {
       addMessage('system', "There was an error processing your request.");
-      console.error("Agent error:", error);
+      console.error("API error:", error);
     }
 
     setIsProcessing(false);
