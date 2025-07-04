@@ -5,16 +5,10 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Box as DreiBox, Cylinder, Sphere } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-
-// --- REMOVED: No longer importing the agent directly ---
-// import { ParsedAgentResponse } from './useDroneAgent';
-
+import { ParsedAgentResponse } from './agent-backend/agent';
+import {MessageContent} from '@langchain/core/messages';
 // --- NEW: Define the response type directly in the frontend ---
 // This should match the type returned by your backend API
-type ParsedAgentResponse = {
-  name: 'setDroneType' | 'setPropellerSize' | 'setWingSpan' | 'giveInfo';
-  args: any; // Using `any` for simplicity, can be more specific
-};
 
 
 // --- Type Definitions (No Changes) ---
@@ -180,12 +174,13 @@ const App: FC = () => {
 
     try {
       // Step 1: Call your backend API endpoint instead of the local agent
+      console.log("step 1");
       const response = await fetch('http://localhost:3001/api/chat', { // Replace with your actual API endpoint
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: userMessage,
-          conversationId: 42, // Send the conversation history
+          userInput: userMessage,
+          conversationId: "42", // Send the conversation history
         }),
       });
 
@@ -194,42 +189,48 @@ const App: FC = () => {
       }
 
       // Step 2: Get the JSON response from the backend
-      const result: ParsedAgentResponse = await response.json();
-      
+      const data = await response.json();
+      const result: ParsedAgentResponse | MessageContent | null = data.response;
+
       if (!result) {
         addMessage('system', "Sorry, I couldn't process that command.");
         setIsProcessing(false);
         return;
       }
       
+      const isToolCall = typeof result === 'object' && 'name' in result;
       // Step 3: The existing switch statement works perfectly with the backend response
-      const { name, args } = result;
-      switch (name) {
-        case 'setDroneType':
-          setDroneType(args.type);
-          addMessage('system', `Drone type set to ${args.type}.`);
-          break;
+      if (isToolCall) {
+          const { name, args } = result;
+          switch (name) {
+            case 'setDroneType':
+              setDroneType(args.type);
+              addMessage('system', `Drone type set to ${args.type}.`);
+              break;
 
-        case 'setPropellerSize':
-          setPropellerScale(args.propellerScale);
-          addMessage('system', `Propeller size set to ${args.propellerScale}x.`);
-          break;
+            case 'setPropellerSize':
+              setPropellerScale(args.propellerScale);
+              addMessage('system', `Propeller size set to ${args.propellerScale}x.`);
+              break;
 
-        case 'setWingSpan':
-          setWingSpan(args.wingSpan);
-          addMessage('system', `Wingspan set to ${args.wingSpan} meters.`);
-          break;
-        
-        case 'giveInfo':
-          addMessage('system', args.answer);
-          break;
+            case 'setWingSpan':
+              setWingSpan(args.wingSpan);
+              addMessage('system', `Wingspan set to ${args.wingSpan} meters.`);
+              break;
 
-        default:
-          addMessage('system', "Sorry, I understood the command but couldn't execute it.");
-          break;
+            default:
+              addMessage('system', "Sorry, I understood the command but couldn't execute it.");
+              break;
+          }
       }
-
-    } catch (error) {
+      else {
+        if (typeof result === 'string') addMessage('system', result);
+        else {
+            addMessage('system', "Sorry, the message content is complex");
+        }
+      }
+    
+      } catch (error) {
       addMessage('system', "There was an error processing your request.");
       console.error("API error:", error);
     }

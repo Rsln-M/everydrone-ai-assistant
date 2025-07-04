@@ -73,6 +73,7 @@ const agent = createReactAgent({
   llm: model,
   tools: [setPropellerSize],
   checkpointSaver: agentCheckpointer,
+  responseFormat: ResponseFormatter,
   // interruptBefore: ["tools"],
 });
 
