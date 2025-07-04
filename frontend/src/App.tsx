@@ -1,15 +1,23 @@
-// src/App.tsx
-
 import React, { useState, useRef, useEffect, FC, ComponentProps } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Box as DreiBox, Cylinder, Sphere } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-import { ParsedAgentResponse } from './agent-backend/agent';
 import {MessageContent} from '@langchain/core/messages';
+import * as allTools from "./tools"; // Use .js extension for Node ESM
+import { z } from "zod";
+
 // --- NEW: Define the response type directly in the frontend ---
 // This should match the type returned by your backend API
 
+type ToolResponseMap = {
+  [K in keyof typeof allTools]: {
+    name: K;
+    args: z.infer<typeof allTools[K]>;
+    message: MessageContent;
+  }
+};
+export type ParsedAgentResponse = ToolResponseMap[keyof typeof allTools];
 
 // --- Type Definitions (No Changes) ---
 type PropellerProps = {

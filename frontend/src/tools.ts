@@ -23,9 +23,3 @@ export const setWingSpan = z.object({
 }).describe(
   "Sets the exact wingspan for the fixed-wing drone model, specified in meters. Use this only when the user gives a specific instruction to change the wing size or span."
 );
-
-export const giveInfo = z.object({
-    answer: z.string().describe("The information to provide to the user. This can be a recommendation, a question for clarification, or a confirmation."),
-}).describe(
-  "This is the default fallback tool. Use this to ask for clarification if a user's request is ambiguous (e.g., missing a parameter), or to answer any general question when no other tool is a direct match."
-);
