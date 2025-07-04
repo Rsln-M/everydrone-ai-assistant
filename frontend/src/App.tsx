@@ -182,7 +182,6 @@ const App: FC = () => {
 
     try {
       // Step 1: Call your backend API endpoint instead of the local agent
-      console.log("step 1");
       const response = await fetch('http://localhost:3001/api/chat', { // Replace with your actual API endpoint
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
