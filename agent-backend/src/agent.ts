@@ -6,12 +6,26 @@ import { z } from "zod";
 import * as allTools from "./tools"; // Use .js extension for Node ESM
 import { tool } from "@langchain/core/tools";
 import * as dotenv from "dotenv";
+import {PostgresSaver} from "@langchain/langgraph-checkpoint-postgres";
+import pg from "pg";
+
+const { Pool } = pg;
+
+const pool = new Pool({
+  connectionString: "postgresql://postgres:1234@localhost:5432/testdb"
+});
+
+const checkpointer = new PostgresSaver(pool);
+
+// NOTE: you need to call .setup() the first time you're using your checkpointer
+
+// await checkpointer.setup();
 
 dotenv.config();
 // Initialize the Chat Model
 const chat = new ChatOpenAI({
   temperature: 0,
-  modelName: "gpt-4.1-mini",
+  modelName: "gpt-4.1-nano",
 });
 
 // Format tools for the agent
@@ -34,7 +48,7 @@ const memory = new MemorySaver();
 const agent = createReactAgent({
   llm: chat,
   tools: formattedTools,
-  checkpointSaver: memory, // This enables conversation memory
+  checkpointSaver: checkpointer, // This enables conversation memory
   prompt: `You are an expert 3D drone configurator assistant. Your primary goal is to help users modify a drone model by calling the available functions.
     RULES:
     1.  You MUST ONLY use a function if the user's request is a clear, direct, and unambiguous match for the function's description.

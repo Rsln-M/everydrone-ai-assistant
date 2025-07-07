@@ -175,6 +175,13 @@ const App: FC = () => {
   const handleCommand = async () => {
     if (!userInput.trim() || isProcessing) return;
     
+    const printMessageContent = (message: MessageContent) => {
+      if (typeof message === 'string') addMessage('system', message);
+        else {
+            addMessage('system', "Sorry, the message content is complex");
+        }
+    }
+
     const userMessage = userInput; // Capture user input
     addMessage('user', userMessage);
     setIsProcessing(true);
@@ -208,21 +215,21 @@ const App: FC = () => {
       const isToolCall = typeof result === 'object' && 'name' in result;
       // Step 3: The existing switch statement works perfectly with the backend response
       if (isToolCall) {
-          const { name, args } = result;
+          const { name, args, message } = result;
           switch (name) {
             case 'setDroneType':
               setDroneType(args.type);
-              addMessage('system', `Drone type set to ${args.type}.`);
+              printMessageContent(message);
               break;
 
             case 'setPropellerSize':
               setPropellerScale(args.propellerScale);
-              addMessage('system', `Propeller size set to ${args.propellerScale}x.`);
+              printMessageContent(message);
               break;
 
             case 'setWingSpan':
               setWingSpan(args.wingSpan);
-              addMessage('system', `Wingspan set to ${args.wingSpan} meters.`);
+              printMessageContent(message);
               break;
 
             default:
@@ -231,10 +238,7 @@ const App: FC = () => {
           }
       }
       else {
-        if (typeof result === 'string') addMessage('system', result);
-        else {
-            addMessage('system', "Sorry, the message content is complex");
-        }
+        printMessageContent(result);
       }
     
       } catch (error) {
