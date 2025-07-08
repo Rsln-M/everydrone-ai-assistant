@@ -48,6 +48,7 @@ type ChatState = {
   setUserInput: React.Dispatch<React.SetStateAction<string>>;
   isProcessing: boolean;
   handleCommand: () => Promise<void>;
+  handleDeleteHistory: () => Promise<void>;
 };
 
 
@@ -70,6 +71,11 @@ const CloseIcon: FC<ComponentProps<'svg'>> = (props) => (
   </svg>
 );
 
+const TrashIcon: FC<ComponentProps<'svg'>> = (props) => (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+    </svg>
+);
 
 // --- 3D Components (No Changes) ---
 const Propeller: FC<PropellerProps> = ({ position, rotation = [0, 0, 0], scale = 1 }) => {
@@ -112,7 +118,7 @@ const FixedWingDrone: FC<FixedWingDroneProps> = ({ wingSpan = 2.5, propellerScal
 
 // --- Chat UI Component (No Changes) ---
 const ChatWidget: FC<{ chatState: ChatState }> = ({ chatState }) => {
-  const { isChatOpen, setIsChatOpen, chatHistory, userInput, setUserInput, isProcessing, handleCommand } = chatState;
+  const { isChatOpen, setIsChatOpen, chatHistory, userInput, setUserInput, isProcessing, handleCommand, handleDeleteHistory} = chatState;
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,9 +137,14 @@ const ChatWidget: FC<{ chatState: ChatState }> = ({ chatState }) => {
     <div className="chat-widget-container">
       <div className="chat-header">
         <h2>AI Assistant</h2>
-        <button className="chat-close-btn" onClick={() => setIsChatOpen(false)}>
-          <CloseIcon className="chat-close-icon" />
-        </button>
+        <div>
+          <button className="chat-close-btn" onClick={handleDeleteHistory} disabled={isProcessing}>
+            <TrashIcon className="chat-close-icon" />
+          </button>
+          <button className="chat-close-btn" onClick={() => setIsChatOpen(false)}>
+            <CloseIcon className="chat-close-icon" />
+          </button>
+        </div>
       </div>
       <div className="chat-log">
         {chatHistory.map((msg, index) => (
@@ -158,6 +169,7 @@ const App: FC = () => {
   const [droneType, setDroneType] = useState<'Fixed-wing' | 'Rotary-wing'>('Fixed-wing');
   const [propellerScale, setPropellerScale] = useState<number>(1);
   const [wingSpan, setWingSpan] = useState<number>(2.5);
+  const [conversationId, setConversationId] = useState(() => `thread_${Date.now()}`);
 
   // Chat State (No Changes)
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
@@ -194,7 +206,7 @@ const App: FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userInput: userMessage,
-          conversationId: "42", // Send the conversation history
+          conversationId: conversationId, // Send the conversation history
         }),
       });
 
@@ -249,9 +261,42 @@ const App: FC = () => {
     setIsProcessing(false);
   };
 
+  // --- ⭐️ NEW: Add the delete history handler function ⭐️ ---
+  const handleDeleteHistory = async () => {
+    if (isProcessing) return;
+
+    // Optional: Ask for confirmation
+    const isConfirmed = window.confirm("Are you sure you want to start a new chat? The current history will be deleted.");
+    if (!isConfirmed) {
+        return;
+    }
+
+    setIsProcessing(true);
+    try {
+        const response = await fetch(`http://localhost:3001/api/chat/${conversationId}`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to delete history on the server.");
+        }
+
+        // If successful, reset the frontend state
+        console.log("History deleted, starting new thread.");
+        setChatHistory([{ role: 'system', content: 'New chat started. How can I help?' }]);
+        setConversationId(`thread_${Date.now()}`); // Generate a new ID for the new conversation
+
+    } catch (error) {
+        console.error("Error deleting chat history:", error);
+        addMessage('system', 'Sorry, I could not delete the chat history.');
+    }
+    setIsProcessing(false);
+  };
+
   const chatState: ChatState = {
     isChatOpen, setIsChatOpen, chatHistory,
-    userInput, setUserInput, isProcessing, handleCommand
+    userInput, setUserInput, isProcessing, handleCommand,
+    handleDeleteHistory,
   };
 
   return (
