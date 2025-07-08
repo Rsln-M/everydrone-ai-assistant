@@ -17,6 +17,34 @@ const pool = new Pool({
 
 const checkpointer = new PostgresSaver(pool);
 
+export async function deleteThread(threadId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    await client.query(
+      "DELETE FROM checkpoints WHERE thread_id = $1",
+      [threadId]
+    );
+    await client.query(
+      "DELETE FROM checkpoint_blobs WHERE thread_id = $1",
+      [threadId]
+    );
+    await client.query(
+      "DELETE FROM checkpoint_writes WHERE thread_id = $1",
+      [threadId]
+    );
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Error deleting thread:", err);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // NOTE: you need to call .setup() the first time you're using your checkpointer
 
 // await checkpointer.setup();
@@ -42,7 +70,7 @@ const formattedTools = Object.entries(allTools).map(([name, schema]) =>
 );
 
 // Initialize the checkpointer for conversation memory
-const memory = new MemorySaver();
+// const memory = new MemorySaver();
 
 // Create the AI Agent with Memory
 const agent = createReactAgent({
@@ -66,7 +94,6 @@ type ToolResponseMap = {
   }
 };
 export type ParsedAgentResponse = ToolResponseMap[keyof typeof allTools];
-
 
 /**
  * Runs the AI agent with user input and a conversation ID.

@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { runAgent } from './agent'; // Make sure this path is correct
+import { runAgent, deleteThread } from './agent'; // Make sure this path is correct
 
 // Initialize the Express app
 const app = express();
@@ -37,6 +37,29 @@ app.post('/api/chat', async (req, res): Promise<any> => {
   } catch (error) {
     console.error("Error in /chat endpoint:", error);
     res.status(500).json({ error: 'An internal server error occurred.' });
+  }
+});
+// In index.ts, add this new endpoint
+
+app.delete('/api/chat/:threadId', async (req, res) => {
+  try {
+    const { threadId } = req.params; // Get the ID from the URL parameter
+
+    if (!threadId) {
+            return res.status(400).json({ error: 'Thread ID is required.' });
+        }
+    
+    console.log(`Received request to delete thread: ${threadId}`);
+
+    // You call your delete function here
+    await deleteThread(threadId);
+        
+    // Send a success response
+    res.status(200).json({ message: `Thread ${threadId} deleted successfully.` });
+
+  } catch (error) {
+    console.error("Error deleting thread:", error);
+    res.status(500).json({ error: 'Failed to delete chat history.' });
   }
 });
 
