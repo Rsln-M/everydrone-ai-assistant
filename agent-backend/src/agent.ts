@@ -45,6 +45,9 @@ export async function deleteThread(threadId: string): Promise<void> {
   }
 }
 
+export async function getChatHistory(threadId: string): Promise<any> {
+  return checkpointer.get({configurable: {threadId: threadId}})
+}
 // NOTE: you need to call .setup() the first time you're using your checkpointer
 
 // await checkpointer.setup();

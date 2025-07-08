@@ -49,6 +49,7 @@ type ChatState = {
   isProcessing: boolean;
   handleCommand: () => Promise<void>;
   handleDeleteHistory: () => Promise<void>;
+  isLoadingHistory: boolean;
 };
 
 
@@ -169,15 +170,51 @@ const App: FC = () => {
   const [droneType, setDroneType] = useState<'Fixed-wing' | 'Rotary-wing'>('Fixed-wing');
   const [propellerScale, setPropellerScale] = useState<number>(1);
   const [wingSpan, setWingSpan] = useState<number>(2.5);
-  const [conversationId, setConversationId] = useState(() => `thread_${Date.now()}`);
 
-  // Chat State (No Changes)
+  // Chat State
+  const [conversationId, setConversationId] = useState(() => `thread_${Date.now()}`);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [userInput, setUserInput] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
-    { role: 'system', content: 'Hello! How can I configure the drone?' }
-  ]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+
+  // Effect to load the thread ID from localStorage on initial render
+  useEffect(() => {
+    const savedId = localStorage.getItem('drone-thread-id');
+    if (savedId) {
+      setConversationId(savedId);
+    } else {
+      const newId = `thread_${Date.now()}`;
+      localStorage.setItem('drone-thread-id', newId);
+      setConversationId(newId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!conversationId) return; // Don't run if we don't have an ID yet
+
+    const loadHistory = async () => {
+      setIsLoadingHistory(true);
+      try {
+        const response = await fetch(`http://localhost:3001/api/chat/${conversationId}`);
+        if (!response.ok) throw new Error("Failed to fetch history");
+        
+        const data = await response.json();
+        if (data && data.length > 0) {
+          setChatHistory(data);
+        } else {
+          setChatHistory([{ role: 'system', content: 'Hello! How can I configure the drone?' }]);
+        }
+      } catch (error) {
+        console.error("Could not load chat history:", error);
+        setChatHistory([{ role: 'system', content: 'Could not load history. Starting a new chat.' }]);
+      }
+      setIsLoadingHistory(false);
+    };
+
+    loadHistory();
+  }, [conversationId]); // This runs when the app loads and after history is deleted
 
   const addMessage = (role: ChatMessage['role'], content: string) => {
     setChatHistory(prev => [...prev, { role, content }]);
@@ -263,32 +300,21 @@ const App: FC = () => {
 
   // --- ⭐️ NEW: Add the delete history handler function ⭐️ ---
   const handleDeleteHistory = async () => {
-    if (isProcessing) return;
-
-    // Optional: Ask for confirmation
-    const isConfirmed = window.confirm("Are you sure you want to start a new chat? The current history will be deleted.");
-    if (!isConfirmed) {
-        return;
-    }
+    if (isProcessing || !conversationId) return;
+    if (!window.confirm("Are you sure you want to start a new chat?")) return;
 
     setIsProcessing(true);
     try {
-        const response = await fetch(`http://localhost:3001/api/chat/${conversationId}`, {
-            method: 'DELETE',
-        });
-
-        if (!response.ok) {
-            throw new Error("Failed to delete history on the server.");
-        }
-
-        // If successful, reset the frontend state
-        console.log("History deleted, starting new thread.");
-        setChatHistory([{ role: 'system', content: 'New chat started. How can I help?' }]);
-        setConversationId(`thread_${Date.now()}`); // Generate a new ID for the new conversation
+      await fetch(`http://localhost:3001/api/chat/${conversationId}`, { method: 'DELETE' });
+      
+      // Create a new thread ID and save it, which will trigger the useEffect to reset the chat
+      const newId = `thread_${Date.now()}`;
+      localStorage.setItem('drone-thread-id', newId);
+      setConversationId(newId);
 
     } catch (error) {
-        console.error("Error deleting chat history:", error);
-        addMessage('system', 'Sorry, I could not delete the chat history.');
+      console.error("Error deleting chat history:", error);
+      addMessage('system', 'Sorry, I could not delete the chat history.');
     }
     setIsProcessing(false);
   };
@@ -296,7 +322,7 @@ const App: FC = () => {
   const chatState: ChatState = {
     isChatOpen, setIsChatOpen, chatHistory,
     userInput, setUserInput, isProcessing, handleCommand,
-    handleDeleteHistory,
+    handleDeleteHistory, isLoadingHistory,
   };
 
   return (

@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { runAgent, deleteThread } from './agent'; // Make sure this path is correct
+import { runAgent, deleteThread, getChatHistory } from './agent'; // Make sure this path is correct
 
 // Initialize the Express app
 const app = express();
@@ -39,7 +39,34 @@ app.post('/api/chat', async (req, res): Promise<any> => {
     res.status(500).json({ error: 'An internal server error occurred.' });
   }
 });
-// In index.ts, add this new endpoint
+
+// --- ⭐️ NEW: GET ENDPOINT TO FETCH HISTORY ⭐️ ---
+app.get('/api/chat/:threadId', async (req, res) => {
+    try {
+        const { threadId } = req.params;
+        if (!threadId) {
+            return res.status(400).json({ error: 'Thread ID is required.' });
+        }
+
+        console.log(`Fetching history for thread: ${threadId}`);
+        const history = await getChatHistory(threadId);
+
+        if (history && history.length > 0) {
+            // Convert LangChain messages to the simple format the frontend expects
+            const formattedHistory = history.map(msg => ({
+                role: msg.constructor.name === 'HumanMessage' ? 'user' : 'system',
+                content: msg.content,
+            }));
+            res.status(200).json(formattedHistory);
+        } else {
+            // If no history exists for this thread, return an empty array
+            res.status(200).json([]);
+        }
+    } catch (error) {
+        console.error(`Error fetching history for thread:`, error);
+        res.status(500).json({ error: 'Failed to fetch chat history.' });
+    }
+});
 
 app.delete('/api/chat/:threadId', async (req, res) => {
   try {
