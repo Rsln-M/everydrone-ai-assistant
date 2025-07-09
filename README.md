@@ -8,7 +8,13 @@
 git clone https://github.com/Rsln-M/everydrone-ai-assistant.git
 ```
 
-### 2. Open two terminals, install packages, add .env file and run
+### 2. Create a database and paste the details to the connection pool
+
+```bash
+postgresql://user:password@localhost:port/database-name
+```
+
+### 3. Open two terminals, install packages, add .env file and run
 
 ```bash
 cd everydrone-ai-assistant/frontend
