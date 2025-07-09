@@ -1,6 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { AIMessage, HumanMessage, ToolMessage, MessageContent} from "@langchain/core/messages";
+import { AIMessage, HumanMessage, ToolMessage, MessageContent, BaseMessage} from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { z } from "zod";
 import * as allTools from "./tools"; // Use .js extension for Node ESM
@@ -17,22 +17,22 @@ const pool = new Pool({
 
 const checkpointer = new PostgresSaver(pool);
 
-export async function deleteThread(threadId: string): Promise<void> {
+export async function deleteThread(conversationId: string): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     await client.query(
       "DELETE FROM checkpoints WHERE thread_id = $1",
-      [threadId]
+      [conversationId]
     );
     await client.query(
       "DELETE FROM checkpoint_blobs WHERE thread_id = $1",
-      [threadId]
+      [conversationId]
     );
     await client.query(
       "DELETE FROM checkpoint_writes WHERE thread_id = $1",
-      [threadId]
+      [conversationId]
     );
 
     await client.query("COMMIT");
@@ -45,12 +45,19 @@ export async function deleteThread(threadId: string): Promise<void> {
   }
 }
 
-export async function getChatHistory(threadId: string): Promise<any> {
-  return checkpointer.get({configurable: {threadId: threadId}})
+export async function getChatHistory(conversationId: string): Promise<BaseMessage[] | null>{
+  try {
+    const messages = (await checkpointer.get({configurable: {thread_id: conversationId}}))?.channel_values?.messages;
+    return Array.isArray(messages) ? messages : [];
+  } catch (err) {
+    console.error("Error getting chat history:", err);
+    return null;
+  }
 }
+
 // NOTE: you need to call .setup() the first time you're using your checkpointer
 
-// await checkpointer.setup();
+await checkpointer.setup();
 
 dotenv.config();
 // Initialize the Chat Model

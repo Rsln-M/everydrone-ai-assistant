@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { runAgent, deleteThread, getChatHistory } from './agent'; // Make sure this path is correct
+import {HumanMessage, AIMessage, BaseMessage} from "@langchain/core/messages"
 
 // Initialize the Express app
 const app = express();
@@ -53,10 +54,17 @@ app.get('/api/chat/:threadId', async (req, res) => {
 
         if (history && history.length > 0) {
             // Convert LangChain messages to the simple format the frontend expects
-            const formattedHistory = history.map(msg => ({
-                role: msg.constructor.name === 'HumanMessage' ? 'user' : 'system',
-                content: msg.content,
-            }));
+            const formattedHistory = history
+              .filter(msg =>
+                msg instanceof HumanMessage || (msg instanceof AIMessage && (!msg.tool_calls || msg.tool_calls?.length === 0)) // only keep relevant types
+              )
+              .filter(msg =>
+                typeof msg.content === "string" && msg.content.trim() !== "" // skip empty content
+              )
+              .map(msg => ({
+                role: msg instanceof HumanMessage ? "user" : "system",
+                content: msg.content
+              }));
             res.status(200).json(formattedHistory);
         } else {
             // If no history exists for this thread, return an empty array

@@ -172,7 +172,7 @@ const App: FC = () => {
   const [wingSpan, setWingSpan] = useState<number>(2.5);
 
   // Chat State
-  const [conversationId, setConversationId] = useState(() => `thread_${Date.now()}`);
+  const [conversationId, setConversationId] = useState<string>();
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [userInput, setUserInput] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
