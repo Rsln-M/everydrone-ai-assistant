@@ -8,7 +8,7 @@
 git clone https://github.com/Rsln-M/everydrone-ai-assistant.git
 ```
 
-### 2. Create a database and paste the details to the connection pool
+### 2. Create a database and paste the details to the connection pool in agent-backend/src/agent.ts
 
 ```bash
 postgresql://user:password@localhost:port/database-name
