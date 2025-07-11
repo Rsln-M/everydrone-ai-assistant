@@ -1,21 +1,35 @@
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatOpenAI, OpenAIEmbeddings } from "@langchain/openai";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { AIMessage, HumanMessage, ToolMessage, MessageContent, BaseMessage} from "@langchain/core/messages";
+import { PGVectorStore, DistanceStrategy} from "@langchain/community/vectorstores/pgvector";
+// import {WebBaseLoader} from "@langchain/community/document_loaders/cheertio";
 import { MemorySaver } from "@langchain/langgraph";
 import { z } from "zod";
 import * as allTools from "./tools"; // Use .js extension for Node ESM
 import { tool } from "@langchain/core/tools";
 import * as dotenv from "dotenv";
 import {PostgresSaver} from "@langchain/langgraph-checkpoint-postgres";
-import pg from "pg";
+import pg, {PoolConfig} from "pg";
 
 const { Pool } = pg;
 
+// Edit this part to match the database you created
 const pool = new Pool({
   connectionString: "postgresql://postgres:1234@localhost:5432/testdb"
 });
 
+dotenv.config();
+
+// Initialize the Chat Model
+const chat = new ChatOpenAI({
+  temperature: 0,
+  modelName: "gpt-4.1-nano",
+});
+
 const checkpointer = new PostgresSaver(pool);
+
+// NOTE: you need to call .setup() the first time you're using your checkpointer
+await checkpointer.setup();
 
 export async function deleteThread(conversationId: string): Promise<void> {
   const client = await pool.connect();
@@ -55,17 +69,6 @@ export async function getChatHistory(conversationId: string): Promise<BaseMessag
   }
 }
 
-// NOTE: you need to call .setup() the first time you're using your checkpointer
-
-await checkpointer.setup();
-
-dotenv.config();
-// Initialize the Chat Model
-const chat = new ChatOpenAI({
-  temperature: 0,
-  modelName: "gpt-4.1-nano",
-});
-
 // Format tools for the agent
 const formattedTools = Object.entries(allTools).map(([name, schema]) => 
   {
@@ -82,6 +85,17 @@ const formattedTools = Object.entries(allTools).map(([name, schema]) =>
 // Initialize the checkpointer for conversation memory
 // const memory = new MemorySaver();
 
+// Define the response type for the frontend
+type ToolResponseMap = {
+  [K in keyof typeof allTools]: {
+    name: K;
+    args: z.infer<typeof allTools[K]>;
+    message: MessageContent;
+  }
+};
+
+export type ParsedAgentResponse = ToolResponseMap[keyof typeof allTools];
+
 // Create the AI Agent with Memory
 const agent = createReactAgent({
   llm: chat,
@@ -94,16 +108,6 @@ const agent = createReactAgent({
     3.  When in doubt, or if no tool is a direct match, your default behavior MUST be to ask for clarification.
     4.  Be concise in your responses.`,
 });
-
-// Define the response type for the frontend
-type ToolResponseMap = {
-  [K in keyof typeof allTools]: {
-    name: K;
-    args: z.infer<typeof allTools[K]>;
-    message: MessageContent;
-  }
-};
-export type ParsedAgentResponse = ToolResponseMap[keyof typeof allTools];
 
 /**
  * Runs the AI agent with user input and a conversation ID.

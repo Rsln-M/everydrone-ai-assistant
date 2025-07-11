@@ -23,7 +23,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-**/src/**/test*.ts
+# **/src/**/test*.ts
 
 # dotenv secrets
 .env
