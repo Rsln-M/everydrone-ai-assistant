@@ -66,7 +66,25 @@ const config = {
 
 const vectorStore = await PGVectorStore.initialize(embeddings, config);
 
-const allDocs: Document<Record<string, any>>[]  = [];
+// const urls = [
+//   'https://docs.everydrone.io/docs/advanced-simulation/cfd-components-propeller',
+//   'https://docs.everydrone.io/docs/advanced-simulation/cfd-components-wing',
+//   'https://docs.everydrone.io/docs/advanced-simulation/cfd-integration-aircraft',
+//   'https://docs.everydrone.io/docs/advanced-simulation/cfd-integration-custom',
+//   'https://docs.everydrone.io/docs/advanced-simulation/fea-components-propeller',
+//   'https://docs.everydrone.io/docs/advanced-simulation/fea-components-wing',
+//   'https://docs.everydrone.io/docs/advanced-simulation/fea-integration-aircraft',
+//   'https://docs.everydrone.io/docs/advanced-simulation/fea-integration-custom',
+//   'https://docs.everydrone.io/docs/advanced-simulation/overview',
+//   'https://docs.everydrone.io/docs/basic-drone-design/overview',
+//   'https://docs.everydrone.io/docs/category/5-tutorials',
+//   'https://docs.everydrone.io/docs/drone-calculator/overview',
+//   'https://docs.everydrone.io/docs/intro',
+//   'https://docs.everydrone.io/docs/sign-up/sign-up-guide',
+//   'https://docs.everydrone.io/docs/tutorials/overview',
+// ];
+
+// const allDocs: Document<Record<string, any>>[]  = [];
 
 // for (const url of urls) {
 //   try {
@@ -110,7 +128,7 @@ const retrieve = tool(
 // Step 1: Generate an AIMessage that may include a tool-call to be sent.
 async function queryOrRespond(state: typeof MessagesAnnotation.State) {
   const llmWithTools = llm.bindTools([retrieve]);
-  const response = await llmWithTools.invoke(state.messages);
+  const response = await llmWithTools.invoke(state.messages.slice(0, -1));
   // MessagesState appends messages to state instead of overwriting
   return { messages: [response] };
 }
@@ -121,8 +139,13 @@ async function callModel(state: typeof MessagesAnnotation.State) {
     // We return a list, because this will get added to the existing list
     return { messages: [response] };
   }
+  const prompt = [
+    new SystemMessage("If and only if the query matches one of the tools EXACTLY, use a tool. Otherwise, return an empty message."),
+    ...state.messages,
+  ];
   const llmWithTools = llm.bindTools(formattedTools);
-  const response = await llmWithTools.invoke(state.messages);
+  const response = await llmWithTools.invoke(prompt);
+  response.content = "";
   // We return a list, because this will get added to the existing list
   return { messages: [response] };
 }
@@ -172,16 +195,28 @@ async function generate(state: typeof MessagesAnnotation.State) {
 }
 
 function isRetrieval({ messages }: typeof MessagesAnnotation.State) {
-  console.log(messages);
   const lastMessage = messages[messages.length - 1] as ToolMessage;
 
   // If the tool call is retieve, go to "generate"
   if (lastMessage.name && lastMessage.name === "retrieve") {
     return "generate";
   }
-  console.log("check");
   // Otherwise, we go to the beginning
   return "__start__";
+}
+
+function isCommand({ messages }: typeof MessagesAnnotation.State) {
+  const lastMessage = messages[messages.length - 1] as AIMessage;
+
+  // If the tool call is retieve, go to "generate"
+  if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
+    return "tools";
+  }
+  if (lastMessage.content === "") {
+    return "queryOrRespond"
+  }
+  // Otherwise, we go to the end
+  return "__end__";
 }
 
 const graphBuilder = new StateGraph(MessagesAnnotation)
@@ -196,6 +231,7 @@ const graphBuilder = new StateGraph(MessagesAnnotation)
   })
 //   .addEdge("tools", "generate")
   .addConditionalEdges("tools", isRetrieval)
+  .addConditionalEdges("agent", isCommand)
   .addEdge("generate", "__end__");
 
 const graph = graphBuilder.compile({checkpointer: agentCheckpointer});
