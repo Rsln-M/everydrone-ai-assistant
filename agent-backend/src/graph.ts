@@ -1,26 +1,17 @@
-import { XMLParser } from "fast-xml-parser";
-import fetch from "node-fetch";
 import { ChatOpenAI } from "@langchain/openai";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { PGVectorStore, DistanceStrategy } from "@langchain/community/vectorstores/pgvector";
-import { PoolConfig } from "pg";
-import "cheerio";
-import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
-import { Document } from "@langchain/core/documents";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { pull } from "langchain/hub";
 import { Annotation, StateGraph, MessagesAnnotation, MemorySaver } from "@langchain/langgraph";
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import * as dotenv from "dotenv";
 import * as allTools from "./tools"; // Use .js extension for Node ESM
 import { tool, DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
 import { AIMessage, HumanMessage, ToolMessage, SystemMessage ,MessageContent, BaseMessage, isAIMessage} from "@langchain/core/messages";
+import {config} from "./config";
 
 dotenv.config();
-
-const agentCheckpointer = new MemorySaver();
 
 // Format tools for the agent
 const formattedTools: DynamicStructuredTool[] = Object.entries(allTools).map(([name, schema]) => 
@@ -44,66 +35,7 @@ const embeddings = new OpenAIEmbeddings({
   model: "text-embedding-3-large"
 });
 
-const config = {
-  postgresConnectionOptions: {
-    type: "postgres",
-    host: "127.0.0.1",
-    port: 5432,
-    user: "postgres",
-    password: "1234",
-    database: "testdb",
-  } as PoolConfig,
-  tableName: "testlangchainjs",
-  columns: {
-    idColumnName: "id",
-    vectorColumnName: "vector",
-    contentColumnName: "content",
-    metadataColumnName: "metadata",
-  },
-  // supported distance strategies: cosine (default), innerProduct, or euclidean
-  distanceStrategy: "cosine" as DistanceStrategy,
-};
-
 const vectorStore = await PGVectorStore.initialize(embeddings, config);
-
-// const urls = [
-//   'https://docs.everydrone.io/docs/advanced-simulation/cfd-components-propeller',
-//   'https://docs.everydrone.io/docs/advanced-simulation/cfd-components-wing',
-//   'https://docs.everydrone.io/docs/advanced-simulation/cfd-integration-aircraft',
-//   'https://docs.everydrone.io/docs/advanced-simulation/cfd-integration-custom',
-//   'https://docs.everydrone.io/docs/advanced-simulation/fea-components-propeller',
-//   'https://docs.everydrone.io/docs/advanced-simulation/fea-components-wing',
-//   'https://docs.everydrone.io/docs/advanced-simulation/fea-integration-aircraft',
-//   'https://docs.everydrone.io/docs/advanced-simulation/fea-integration-custom',
-//   'https://docs.everydrone.io/docs/advanced-simulation/overview',
-//   'https://docs.everydrone.io/docs/basic-drone-design/overview',
-//   'https://docs.everydrone.io/docs/category/5-tutorials',
-//   'https://docs.everydrone.io/docs/drone-calculator/overview',
-//   'https://docs.everydrone.io/docs/intro',
-//   'https://docs.everydrone.io/docs/sign-up/sign-up-guide',
-//   'https://docs.everydrone.io/docs/tutorials/overview',
-// ];
-
-// const allDocs: Document<Record<string, any>>[]  = [];
-
-// for (const url of urls) {
-//   try {
-//     const cheerioLoader = new CheerioWebBaseLoader(url);
-//     const docs = await cheerioLoader.load();
-//     allDocs.push(...docs); // spread to flatten
-//   } catch (e) {
-//     console.error(`Failed to load ${url}:`, e);
-//   }
-// }
-
-// const splitter = new RecursiveCharacterTextSplitter({
-//   chunkSize: 1000, chunkOverlap: 200
-// });
-// const allSplits = await splitter.splitDocuments(allDocs);
-
-
-// // Index chunks
-// await vectorStore.addDocuments(allSplits)
 
 const retrieveSchema = z.object({ query: z.string() });
 
@@ -128,25 +60,8 @@ const retrieve = tool(
 // Step 1: Generate an AIMessage that may include a tool-call to be sent.
 async function queryOrRespond(state: typeof MessagesAnnotation.State) {
   const llmWithTools = llm.bindTools(formattedTools.concat([retrieve]));
-  const response = await llmWithTools.invoke(state.messages);
+  const response = await llmWithTools.invoke(state.messages.slice(-10));
   // MessagesState appends messages to state instead of overwriting
-  return { messages: [response] };
-}
-
-async function callModel(state: typeof MessagesAnnotation.State) {
-  if (state.messages[state.messages.length - 1] instanceof ToolMessage) {
-    const response = await llm.invoke(state.messages);
-    // We return a list, because this will get added to the existing list
-    return { messages: [response] };
-  }
-  const prompt = [
-    new SystemMessage("If and only if the query matches one of the tools EXACTLY, use a tool. Otherwise, return an empty message."),
-    ...state.messages,
-  ];
-  const llmWithTools = llm.bindTools(formattedTools);
-  const response = await llmWithTools.invoke(prompt);
-  response.content = "";
-  // We return a list, because this will get added to the existing list
   return { messages: [response] };
 }
 
@@ -183,7 +98,7 @@ async function generate(state: typeof MessagesAnnotation.State) {
       message instanceof HumanMessage ||
       message instanceof SystemMessage ||
       (message instanceof AIMessage && message.tool_calls?.length == 0)
-  );
+  ).slice(-10);
   const prompt = [
     new SystemMessage(systemMessageContent),
     ...conversationMessages,
@@ -205,22 +120,7 @@ function isRetrieval({ messages }: typeof MessagesAnnotation.State) {
   return "queryOrRespond";
 }
 
-function isCommand({ messages }: typeof MessagesAnnotation.State) {
-  const lastMessage = messages[messages.length - 1] as AIMessage;
-
-  // If the tool call is retieve, go to "generate"
-  if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-    return "tools";
-  }
-  if (lastMessage.content === "") {
-    return "queryOrRespond"
-  }
-  // Otherwise, we go to the end
-  return "__end__";
-}
-
 const graphBuilder = new StateGraph(MessagesAnnotation)
-  // .addNode("agent", callModel)
   .addNode("queryOrRespond", queryOrRespond)
   .addNode("tools", tools)
   .addNode("generate", generate)
@@ -229,13 +129,10 @@ const graphBuilder = new StateGraph(MessagesAnnotation)
     __end__: "__end__",
     tools: "tools",
   })
-//   .addEdge("tools", "generate")
   .addConditionalEdges("tools", isRetrieval)
-  // .addConditionalEdges("agent", isCommand)
   .addEdge("generate", "__end__");
 
-const graph = graphBuilder.compile();
-graph.checkpointer = agentCheckpointer;
+export const graph = graphBuilder.compile();
 
 const prettyPrint = (message: BaseMessage) => {
   let txt = `[${message.getType()}]: ${message.content}`;
@@ -249,10 +146,10 @@ const prettyPrint = (message: BaseMessage) => {
 };
 
 // Specify an ID for the thread
-const threadConfig = {
-  configurable: { thread_id: "abc1234" },
-  streamMode: "values" as const,
-};
+// const threadConfig = {
+//   configurable: { thread_id: "abc1234" },
+//   streamMode: "values" as const,
+// };
 
 // console.log(formattedTools.concat([retrieve]))
 
@@ -268,20 +165,23 @@ const threadConfig = {
 //   console.log("-----\n");
 // }
 
-const agentFinalState = await graph.invoke(
-  { messages: [new HumanMessage("hi")] },
-  { configurable: { thread_id: "42" } },
-);
+// const agentFinalState = await graph.invoke(
+//   { messages: [new HumanMessage("hi")] },
+//   { configurable: { thread_id: "42" } },
+// );
 
-console.log(
-  agentFinalState.messages[agentFinalState.messages.length - 1].content,
-);
+// console.log(
+//   agentFinalState.messages[agentFinalState.messages.length - 1].content,
+// );
 
-const agentFinalState2 = await graph.invoke(
-  { messages: [new HumanMessage("what is a drone?")] },
-  { configurable: { thread_id: "42" } },
-);
+// const agentFinalState2 = await graph.invoke(
+//   { messages: [new HumanMessage("what is a drone?")] },
+//   { configurable: { thread_id: "42" } },
+// );
 
-console.log(
-  agentFinalState2.messages[agentFinalState2.messages.length - 1].content,
-);
+// console.log(
+//   agentFinalState2.messages[agentFinalState2.messages.length - 1].content,
+// );
+
+// console.log(agentFinalState2);
+// vectorStore.end();
