@@ -36,7 +36,7 @@ const formattedTools: DynamicStructuredTool[] = Object.entries(allTools).map(([n
 );
 
 const llm = new ChatOpenAI({
-  model: "gpt-4.1-nano",
+  model: "gpt-4.1-mini",
   temperature: 0
 });
 
@@ -201,8 +201,9 @@ function isRetrieval({ messages }: typeof MessagesAnnotation.State) {
   if (lastMessage.name && lastMessage.name === "retrieve") {
     return "generate";
   }
+  console.log("HERE");
   // Otherwise, we go to the beginning
-  return "__start__";
+  return "agent";
 }
 
 function isCommand({ messages }: typeof MessagesAnnotation.State) {
@@ -234,7 +235,8 @@ const graphBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges("agent", isCommand)
   .addEdge("generate", "__end__");
 
-const graph = graphBuilder.compile({checkpointer: agentCheckpointer});
+const graph = graphBuilder.compile();
+graph.checkpointer = agentCheckpointer;
 
 const prettyPrint = (message: BaseMessage) => {
   let txt = `[${message.getType()}]: ${message.content}`;
@@ -255,23 +257,32 @@ const threadConfig = {
 
 // console.log(formattedTools.concat([retrieve]))
 
-let inputs3 = {
-  messages: [{ role: "user", content: "Which criteria is overall drone performance based on" },
-    // { role: "user", content: "Which criteria is overall drone performance based on" },
-  ],
-};
+// let inputs3 = {
+//   messages: [{ role: "user", content: "Which criteria is overall drone performance based on" },
+//     // { role: "user", content: "Which criteria is overall drone performance based on" },
+//   ],
+// };
 
-for await (const step of await graph.stream(inputs3, threadConfig)) {
-  const lastMessage = step.messages[step.messages.length - 1];
-  prettyPrint(lastMessage);
-  console.log("-----\n");
-}
+// for await (const step of await graph.stream(inputs3, threadConfig)) {
+//   const lastMessage = step.messages[step.messages.length - 1];
+//   prettyPrint(lastMessage);
+//   console.log("-----\n");
+// }
 
-// const agentFinalState = await graph.invoke(
-//   { messages: [new HumanMessage("Which criteria is overall drone performance based on")] },
-//   { configurable: { thread_id: "42" } },
-// );
+const agentFinalState = await graph.invoke(
+  { messages: [new HumanMessage("set propeller size")] },
+  { configurable: { thread_id: "42" } },
+);
 
-// console.log(
-//   agentFinalState.messages[agentFinalState.messages.length - 1].content,
-// );
+console.log(
+  agentFinalState.messages[agentFinalState.messages.length - 1].content,
+);
+
+const agentFinalState2 = await graph.invoke(
+  { messages: [new HumanMessage("2")] },
+  { configurable: { thread_id: "42" } },
+);
+
+console.log(
+  agentFinalState2.messages[agentFinalState2.messages.length - 1].content,
+);
