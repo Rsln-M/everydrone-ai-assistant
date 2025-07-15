@@ -1,17 +1,19 @@
-import { ChatOpenAI, OpenAIEmbeddings } from "@langchain/openai";
-import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { AIMessage, HumanMessage, ToolMessage, MessageContent, BaseMessage} from "@langchain/core/messages";
 import { z } from "zod";
 import * as allTools from "./tools"; // Use .js extension for Node ESM
-import { tool } from "@langchain/core/tools";
 import * as dotenv from "dotenv";
 import {PostgresSaver} from "@langchain/langgraph-checkpoint-postgres";
-import pg, {PoolConfig} from "pg";
+import { CallbackHandler } from "langfuse-langchain";
+import pg from "pg";
 import {graph} from "./graph"
+import { callbackHandlerPrefersStreaming } from "@langchain/core/callbacks/base";
+
+dotenv.config();
 
 const { Pool } = pg;
 
-dotenv.config();
+// Initialize Langfuse callback handler
+const langfuseHandler = new CallbackHandler();
 
 // Edit this part to match the database you created
 const pool = new Pool({
@@ -88,7 +90,7 @@ export async function runAgent(userInput: string, conversationId: string): Promi
         // For an existing one, the checkpointer loads the history automatically.
         const response = await graph.invoke(
             { messages: [new HumanMessage(userInput)] },
-            { configurable: { thread_id: conversationId } }
+            { configurable: { thread_id: conversationId }, callbacks: [langfuseHandler] }
         );
         
         const lastMessage = response.messages[response.messages.length - 1].content;
